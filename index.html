@@ -331,6 +331,11 @@
     <div class="loading-note" id="list3-note">読み込み中...</div>
     <div class="videos" id="list3"></div>
   </div>
+  <div class="playlist">
+    <div class="playlist-title" onclick="toggle('list4')">ホラー淫夢シリーズ（検索結果）</div>
+    <div class="loading-note" id="list4-note">読み込み中...</div>
+    <div class="videos" id="list4"></div>
+  </div>
 </div>
 
 <div id="player-area">
@@ -375,6 +380,14 @@ const playlists = [
   { id: "PLExT6MVBKs2C60Ka3OYv1YX9ZpV5hExFV", elementId: "list2" }
 ];
 const CHANNEL_HANDLE = "asmrmayona";
+
+// 検索ベースで一括取得したいキーワード群（重複動画は自動で除外されます）
+const SEARCH_QUERIES = [
+  "禍淫夢",
+  "社会派ホラー淫夢",
+  "【ホラー淫夢】",
+  "ホラー淫夢 ショートホラー淫夢 短編ホラーINM"
+];
 
 let currentVideoId = null;
 let isHidden = false;
@@ -451,14 +464,71 @@ async function loadChannelByHandle(handle, elementId) {
   }
 }
 
-function renderVideo(item, container) {
-  const videoId = item.snippet.resourceId.videoId;
-  const title = item.snippet.title;
-  const thumb =
-    (item.snippet.thumbnails &&
-      (item.snippet.thumbnails.medium?.url ||
-       item.snippet.thumbnails.default?.url)) || "";
+// このセクションで最低限集めたい件数の目安（保証はできません。データが無ければ届きません）
+const SEARCH_TARGET_MIN = 200;
+// 同じキーワードでも並び順を変えて検索すると、取得できる動画の顔ぶれが増えることがあるため併用する
+const SEARCH_ORDERS = ["relevance", "viewCount", "date"];
 
+/**
+ * 複数の検索キーワード×複数の並び順でYouTube検索APIを叩き、
+ * ヒットした動画をvideoId単位で重複排除しながら1つのリストにまとめて表示する。
+ * 注意: search.list は1回あたり100ユニット消費するため、キーワード数・並び順・
+ * ページ数が多いと1日のAPIクォータ(デフォルト10,000ユニット)をすぐに消費します。
+ * 200件を目標にしますが、該当動画自体が少ない場合はそれ以上増やせません。
+ */
+async function loadSearchQueries(queries, elementId) {
+  const container = document.getElementById(elementId);
+  const note = document.getElementById(elementId + '-note');
+  const seen = new Set();
+  let count = 0;
+
+  const updateNote = () => {
+    if (!note) return;
+    note.textContent = `読み込み中... ${count}件取得（目標 ${SEARCH_TARGET_MIN}件）`;
+  };
+  updateNote();
+
+  outer:
+  for (const q of queries) {
+    for (const order of SEARCH_ORDERS) {
+      let pageToken = '';
+      try {
+        do {
+          const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=50&type=video&order=${order}&q=${encodeURIComponent(q)}&key=${API_KEY}${pageToken ? '&pageToken=' + pageToken : ''}`;
+          const res = await fetch(url);
+          const data = await res.json();
+          if (!data.items) break;
+          data.items.forEach(item => {
+            const vid = item.id && item.id.videoId;
+            if (vid && !seen.has(vid)) {
+              seen.add(vid);
+              renderSearchItem(item, container);
+              count++;
+            }
+          });
+          updateNote();
+          pageToken = data.nextPageToken || '';
+        } while (pageToken);
+      } catch (err) {
+        console.error(`検索失敗 ("${q}" / order=${order}):`, err);
+      }
+      // すでに目標件数に達していれば、これ以上のクォータ消費を避けて打ち切る
+      if (count >= SEARCH_TARGET_MIN) break outer;
+    }
+  }
+
+  if (note) {
+    if (count === 0) {
+      note.textContent = '該当する動画が見つかりませんでした';
+    } else if (count < SEARCH_TARGET_MIN) {
+      note.textContent = `目標未達: ${count}件のみ取得できました（該当動画がこれ以上見つかりません）`;
+    } else {
+      note.remove();
+    }
+  }
+}
+
+function renderVideoData(videoId, title, thumb, container) {
   const div = document.createElement("div");
   div.className = "video";
   div.dataset.videoId = videoId;
@@ -493,6 +563,27 @@ function renderVideo(item, container) {
   div.appendChild(thumbWrap);
   div.appendChild(right);
   container.appendChild(div);
+}
+
+function renderVideo(item, container) {
+  const videoId = item.snippet.resourceId.videoId;
+  const title = item.snippet.title;
+  const thumb =
+    (item.snippet.thumbnails &&
+      (item.snippet.thumbnails.medium?.url ||
+       item.snippet.thumbnails.default?.url)) || "";
+  renderVideoData(videoId, title, thumb, container);
+}
+
+function renderSearchItem(item, container) {
+  if (!item.id || !item.id.videoId) return;
+  const videoId = item.id.videoId;
+  const title = item.snippet.title;
+  const thumb =
+    (item.snippet.thumbnails &&
+      (item.snippet.thumbnails.medium?.url ||
+       item.snippet.thumbnails.default?.url)) || "";
+  renderVideoData(videoId, title, thumb, container);
 }
 
 function toggle(id) {
@@ -669,6 +760,7 @@ function ccToggleMute() {
 
 playlists.forEach(p => loadPlaylist(p.id, p.elementId));
 loadChannelByHandle(CHANNEL_HANDLE, 'list3');
+loadSearchQueries(SEARCH_QUERIES, 'list4');
 updatePlayerState();
 </script>
 </body>
