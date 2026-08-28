@@ -1119,12 +1119,15 @@ const CHANNEL_HANDLE =
 
 const HORROR_SEARCH_KEYWORDS = [
 
-    "【ホラー淫夢】",
-
+    /*
+     * 「ホラー淫夢」で
+     * 【ホラー淫夢】/ショートホラー淫夢/ホラー淫夢をまとめて候補取得。
+     */
     "ホラー淫夢",
 
-    "ショートホラー淫夢",
-
+    /*
+     * これは「ホラー淫夢」に文字列として含まれないため別検索。
+     */
     "短編ホラーINM"
 
 ];
@@ -1159,7 +1162,7 @@ const CHANNEL_CACHE_KEY =
 ========================================================= */
 
 const SEARCH_CACHE_KEY =
-    "horror-inm-search-cache-v3";
+    "horror-inm-search-cache-v4";
 
 
 /*
@@ -1217,6 +1220,14 @@ const horrorVideos =
 
 const horrorVideoIds =
     new Set();
+
+
+/*
+ * videos.listで取得した動画詳細のメモリキャッシュ。
+ * 同じ動画が検索語をまたいで重複してもAPIを再利用しない。
+ */
+const videoDetailCache =
+    new Map();
 
 
 /* =========================================================
@@ -1670,21 +1681,31 @@ async function loadChannelByHandle(
    動画詳細
 ========================================================= */
 
-async function fetchVideoDetailsMap(
-    videoIds
-) {
+async function fetchVideoDetailsMap(videoIds) {
 
-    const map =
-        new Map();
+    const map = new Map();
 
-    for (
-        let i = 0;
-        i < videoIds.length;
-        i += 50
-    ) {
+    /*
+     * 同じ動画が複数の検索結果に出ても、
+     * videos.listを何度も呼ばないためのメモリキャッシュ。
+     */
+    const missing = [];
 
-        const chunk =
-            videoIds.slice(i, i + 50);
+    for (const videoId of videoIds) {
+
+        if (videoDetailCache.has(videoId)) {
+            map.set(
+                videoId,
+                videoDetailCache.get(videoId)
+            );
+        } else {
+            missing.push(videoId);
+        }
+    }
+
+    for (let i = 0; i < missing.length; i += 50) {
+
+        const chunk = missing.slice(i, i + 50);
 
         if (chunk.length === 0) {
             continue;
@@ -1698,35 +1719,40 @@ async function fetchVideoDetailsMap(
 
         try {
 
-            const data =
-                await fetchJson(url);
+            const data = await fetchJson(url);
 
             (data.items || []).forEach(video => {
 
-                map.set(
+                const info = {
+                    title:
+                        video.snippet?.title ||
+                        "",
+
+                    tags:
+                        Array.isArray(video.snippet?.tags)
+                            ? video.snippet.tags
+                            : [],
+
+                    thumb:
+                        video.snippet?.thumbnails?.medium?.url ||
+                        video.snippet?.thumbnails?.high?.url ||
+                        video.snippet?.thumbnails?.default?.url ||
+                        "",
+
+                    channelTitle:
+                        video.snippet?.channelTitle ||
+                        ""
+                };
+
+                videoDetailCache.set(
                     video.id,
-                    {
-                        title:
-                            video.snippet?.title ||
-                            "",
-
-                        tags:
-                            Array.isArray(video.snippet?.tags)
-                                ? video.snippet.tags
-                                : [],
-
-                        thumb:
-                            video.snippet?.thumbnails?.medium?.url ||
-                            video.snippet?.thumbnails?.high?.url ||
-                            video.snippet?.thumbnails?.default?.url ||
-                            "",
-
-                        channelTitle:
-                            video.snippet?.channelTitle ||
-                            ""
-                    }
+                    info
                 );
 
+                map.set(
+                    video.id,
+                    info
+                );
             });
 
         } catch (error) {
@@ -1735,9 +1761,7 @@ async function fetchVideoDetailsMap(
                 "動画詳細取得失敗:",
                 error
             );
-
         }
-
     }
 
     return map;
@@ -1753,8 +1777,7 @@ function getTitleTag(
     tags = []
 ) {
 
-    const titleText =
-        String(title || "");
+    const titleText = String(title || "");
 
     const tagText =
         Array.isArray(tags)
@@ -1762,21 +1785,21 @@ function getTitleTag(
             : [];
 
     /*
-     * タイトルとタグの両方を判定対象にする。
+     * タイトルとYouTubeタグの両方を判定対象にする。
      *
-     * 優先順位は、包含関係による誤分類を防ぐため
-     * 長い・具体的な表記を先に判定する。
+     * 重要：
+     * 「【ホラー淫夢】」と「ホラー淫夢」は別カテゴリ。
+     * また、短い語が長い語に含まれるため、
+     * 必ず具体的な表記を先に判定する。
      *
-     * 【ホラー淫夢】
-     * ↓
-     * ショートホラー淫夢
-     * ↓
-     * 短編ホラーINM
-     * ↓
-     * ホラー淫夢
+     * 優先順位：
+     * ① 【ホラー淫夢】
+     * ② ショートホラー淫夢
+     * ③ 短編ホラーINM
+     * ④ ホラー淫夢
      */
 
-    const has = (keyword) =>
+    const has = keyword =>
         titleText.includes(keyword) ||
         tagText.some(tag => tag.includes(keyword));
 
@@ -1813,39 +1836,21 @@ function getSearchCache() {
                 SEARCH_CACHE_KEY
             );
 
-
         if (!raw) {
-
             return {};
-
         }
 
+        const data = JSON.parse(raw);
 
-        const data =
-            JSON.parse(
-                raw
-            );
-
-
-        if (
-            !data ||
-            typeof data !== "object"
-        ) {
-
+        if (!data || typeof data !== "object") {
             return {};
-
         }
-
 
         return data;
 
-
     } catch (error) {
-
         return {};
-
     }
-
 }
 
 
@@ -1853,28 +1858,19 @@ function getSearchCache() {
    検索キャッシュ保存
 ========================================================= */
 
-function saveSearchCache(
-    cache
-) {
+function saveSearchCache(cache) {
 
     try {
-
         localStorage.setItem(
             SEARCH_CACHE_KEY,
-            JSON.stringify(
-                cache
-            )
+            JSON.stringify(cache)
         );
-
     } catch (error) {
-
         console.warn(
             "検索キャッシュ保存失敗:",
             error
         );
-
     }
-
 }
 
 
@@ -1882,164 +1878,73 @@ function saveSearchCache(
    ★検索
 ========================================================= */
 
-async function searchKeywordOnce(
-    keyword
-) {
+async function searchKeywordOnce(keyword) {
 
-    const cache =
-        getSearchCache();
-
-
-    const cached =
-        cache[keyword];
-
+    const cache = getSearchCache();
+    const cached = cache[keyword];
 
     /*
-     * キャッシュが新しければ
-     * APIを呼ばない。
+     * キャッシュが有効ならsearch.listを呼ばない。
      */
-
     if (
         cached &&
-        Array.isArray(
-            cached.ids
-        ) &&
-        Date.now() -
-            cached.time <
-            SEARCH_CACHE_TTL
+        Array.isArray(cached.ids) &&
+        Date.now() - cached.time < SEARCH_CACHE_TTL
     ) {
 
         console.log(
-            `[ホラー淫夢] キャッシュ使用: ${keyword}`
+            `[ホラー淫夢] 検索キャッシュ使用: ${keyword}`
         );
 
-
-        return new Set(
-            cached.ids
-        );
-
+        return new Set(cached.ids);
     }
 
-
-    /*
-     * ★ここが重要。
-     *
-     * 以前：
-     *
-     * relevance
-     * viewCount
-     * date
-     *
-     * × 最大4ページ
-     *
-     * 今回：
-     *
-     * relevance
-     * × 1ページ
-     *
-     * これで検索API使用量を大幅削減。
-     */
-
     const url =
-
         "https://www.googleapis.com/youtube/v3/search" +
-
         "?part=snippet" +
-
         "&maxResults=50" +
-
         "&type=video" +
-
         "&order=relevance" +
-
         `&q=${encodeURIComponent(keyword)}` +
-
         `&key=${encodeURIComponent(API_KEY)}`;
-
 
     let data;
 
-
     try {
-
-        data =
-            await fetchJson(
-                url
-            );
-
-
+        data = await fetchJson(url);
     } catch (error) {
 
-        /*
-         * クォータ超過を特別扱い。
-         */
-
         if (
-            String(
-                error.message
-            ).includes(
-                "Quota exceeded"
-            )
+            String(error.message).includes("Quota exceeded") ||
+            String(error.message).includes("quota")
         ) {
-
             throw new Error(
                 "YouTube APIの検索クォータを使い切っています。クォータ回復後に再読み込みしてください。"
             );
-
         }
 
-
         throw error;
-
     }
 
+    const ids = new Set();
 
-    const ids =
-        new Set();
+    (data.items || []).forEach(item => {
 
+        const videoId = item.id?.videoId;
 
-    (data.items || [])
-        .forEach(
-            item => {
-
-                const videoId =
-                    item.id?.videoId;
-
-
-                if (videoId) {
-
-                    ids.add(
-                        videoId
-                    );
-
-                }
-
-            }
-        );
-
-
-    /*
-     * キャッシュ。
-     */
+        if (videoId) {
+            ids.add(videoId);
+        }
+    });
 
     cache[keyword] = {
-
-        time:
-            Date.now(),
-
-        ids:
-            [...ids]
-
+        time: Date.now(),
+        ids: [...ids]
     };
 
-
-    saveSearchCache(
-        cache
-    );
-
+    saveSearchCache(cache);
 
     return ids;
-
 }
 
 
@@ -2734,8 +2639,13 @@ async function loadHorrorInmContent() {
 
 
         console.log(
-            "タグ別:",
-            tagCounts
+            "カテゴリ別:",
+            {
+                "【ホラー淫夢】": tagCounts["【ホラー淫夢】"] || 0,
+                "ショートホラー淫夢": tagCounts["ショートホラー淫夢"] || 0,
+                "短編ホラーINM": tagCounts["短編ホラーINM"] || 0,
+                "ホラー淫夢": tagCounts["ホラー淫夢"] || 0
+            }
         );
 
 
