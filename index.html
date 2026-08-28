@@ -33,6 +33,20 @@
   }
   .playlist-title:hover { background: #e2e2e2; }
   .videos { display: none; margin-left: 4px; margin-top: 8px; }
+  .subsection { margin: 4px 0 12px 4px; }
+  .subsection-title {
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 6px 9px;
+    background: #f2f2f6;
+    border: 1px solid #e5e5ea;
+    border-radius: 5px;
+    user-select: none;
+    color: #333;
+  }
+  .subsection-title:hover { background: #e8e8ee; }
+  .subvideos { display: none; margin-left: 4px; margin-top: 6px; }
   .video {
     margin: 8px 0;
     display: flex;
@@ -332,9 +346,39 @@
     <div class="videos" id="list3"></div>
   </div>
   <div class="playlist">
-    <div class="playlist-title" onclick="toggle('list4')">ホラー淫夢シリーズ（検索結果）</div>
-    <div class="loading-note" id="list4-note">読み込み中...</div>
-    <div class="videos" id="list4"></div>
+    <div class="playlist-title" onclick="toggle('list4-wrap')">ホラー淫夢シリーズ（検索結果）</div>
+    <div class="videos" id="list4-wrap">
+      <div class="subsection">
+        <div class="subsection-title" onclick="toggle('list4-kazai')">禍淫夢</div>
+        <div class="loading-note" id="list4-kazai-note">読み込み中...</div>
+        <div class="subvideos" id="list4-kazai"></div>
+      </div>
+      <div class="subsection">
+        <div class="subsection-title" onclick="toggle('list4-shakaiha')">社会派ホラー淫夢</div>
+        <div class="loading-note" id="list4-shakaiha-note">読み込み中...</div>
+        <div class="subvideos" id="list4-shakaiha"></div>
+      </div>
+      <div class="subsection">
+        <div class="subsection-title" onclick="toggle('list4-bracket')">【ホラー淫夢】（カッコ付き）</div>
+        <div class="loading-note" id="list4-bracket-note">読み込み中...</div>
+        <div class="subvideos" id="list4-bracket"></div>
+      </div>
+      <div class="subsection">
+        <div class="subsection-title" onclick="toggle('list4-plain')">ホラー淫夢（カッコなし）</div>
+        <div class="loading-note" id="list4-plain-note">読み込み中...</div>
+        <div class="subvideos" id="list4-plain"></div>
+      </div>
+      <div class="subsection">
+        <div class="subsection-title" onclick="toggle('list4-short')">ショートホラー淫夢</div>
+        <div class="loading-note" id="list4-short-note">読み込み中...</div>
+        <div class="subvideos" id="list4-short"></div>
+      </div>
+      <div class="subsection">
+        <div class="subsection-title" onclick="toggle('list4-tanpen')">短編ホラーINM</div>
+        <div class="loading-note" id="list4-tanpen-note">読み込み中...</div>
+        <div class="subvideos" id="list4-tanpen"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -381,12 +425,49 @@ const playlists = [
 ];
 const CHANNEL_HANDLE = "asmrmayona";
 
-// 検索ベースで一括取得したいキーワード群（重複動画は自動で除外されます）
-const SEARCH_QUERIES = [
-  "禍淫夢",
-  "社会派ホラー淫夢",
-  "【ホラー淫夢】",
-  "ホラー淫夢 ショートホラー淫夢 短編ホラーINM"
+// 検索ベースで一括取得したいキーワード群。
+// 以前は複数キーワードをスペース区切りで1つのクエリに結合していたため、
+// 「短編ホラーINM」が単独では一度も検索されないバグがあった。
+// 今回は6つを完全に独立したグループとして扱い、それぞれ別々に検索・表示する。
+// また「【ホラー淫夢】」（カッコ付き）と「ホラー淫夢」（カッコなし）も別グループにして区別する。
+const HORROR_INM_GROUPS = [
+  {
+    label: "禍淫夢",
+    elementId: "list4-kazai",
+    query: "禍淫夢",
+    match: (t) => t.includes("禍淫夢")
+  },
+  {
+    label: "社会派ホラー淫夢",
+    elementId: "list4-shakaiha",
+    query: "社会派ホラー淫夢",
+    match: (t) => t.includes("社会派ホラー淫夢")
+  },
+  {
+    label: "【ホラー淫夢】（カッコ付き）",
+    elementId: "list4-bracket",
+    query: "【ホラー淫夢】",
+    match: (t) => t.includes("【ホラー淫夢】")
+  },
+  {
+    label: "ホラー淫夢（カッコなし）",
+    elementId: "list4-plain",
+    query: "ホラー淫夢",
+    // 「【ホラー淫夢】」を含むタイトルはカッコ付きグループの担当なのでここでは除外する
+    match: (t) => t.includes("ホラー淫夢") && !t.includes("【ホラー淫夢】")
+  },
+  {
+    label: "ショートホラー淫夢",
+    elementId: "list4-short",
+    query: "ショートホラー淫夢",
+    match: (t) => t.includes("ショートホラー淫夢")
+  },
+  {
+    label: "短編ホラーINM",
+    elementId: "list4-tanpen",
+    query: "短編ホラーINM",
+    match: (t) => t.includes("短編ホラーINM")
+  }
 ];
 
 let currentVideoId = null;
@@ -464,25 +545,8 @@ async function loadChannelByHandle(handle, elementId) {
   }
 }
 
-// このセクションで最低限集めたい件数の目安（保証はできません。データが無ければ届きません）
-const SEARCH_TARGET_MIN = 200;
-// 同じキーワードでも並び順を変えて検索すると、取得できる動画の顔ぶれが増えることがあるため併用する
+// 同じキーワードでも並び順を変えると取得できる動画の顔ぶれが増えることがあるため併用する
 const SEARCH_ORDERS = ["relevance", "viewCount", "date"];
-// タイトル or タグにこれらの語のいずれかが実際に含まれる動画だけを最終的に採用する（部分一致）
-const FILTER_KEYWORDS = [
-  "禍淫夢",
-  "社会派ホラー淫夢",
-  "ホラー淫夢",
-  "ショートホラー淫夢",
-  "短編ホラーINM"
-];
-
-function matchesKeywords(title, tags) {
-  // 注意: この手のMAD動画コミュニティでは内容に関係なく人気タグを大量に付ける
-  // 「タグスパム」が横行しているため、タグでの判定は行わずタイトルのみで厳密に判定する。
-  const t = title || "";
-  return FILTER_KEYWORDS.some(k => t.includes(k));
-}
 
 // videos.list はid指定50件まで一括取得可能（part=snippetで1コール1ユニットと安価）
 async function fetchVideoDetailsMap(videoIds) {
@@ -497,7 +561,6 @@ async function fetchVideoDetailsMap(videoIds) {
       data.items.forEach(v => {
         map.set(v.id, {
           title: v.snippet.title,
-          tags: v.snippet.tags || [],
           thumb: (v.snippet.thumbnails && (v.snippet.thumbnails.medium?.url || v.snippet.thumbnails.default?.url)) || ""
         });
       });
@@ -508,69 +571,64 @@ async function fetchVideoDetailsMap(videoIds) {
   return map;
 }
 
-/**
- * 複数の検索キーワード×複数の並び順でYouTube検索APIを叩いて候補動画を広く集めたあと、
- * videos.list でタイトルを取得して FILTER_KEYWORDS に実際に一致するものだけを表示する。
- * （タグはこのジャンルでスパム的に付与されることが多く信頼できないため判定に使わない）
- * 注意: search.list は1回あたり100ユニット消費するため、キーワード数・並び順・
- * ページ数が多いと1日のAPIクォータ(デフォルト10,000ユニット)をすぐに消費します。
- * 200件を目標にしますが、条件に合う動画自体が少ない場合はそれ以上増やせません。
- */
-async function loadSearchQueries(queries, elementId) {
-  const container = document.getElementById(elementId);
-  const note = document.getElementById(elementId + '-note');
+// 単一キーワードで検索し、videoIdの候補集合を返す（複数キーワードを結合しない＝バグ再発防止）
+// 注意: 以前は候補数が一定数に達したら打ち切っていたが、これが原因で
+// タイトルに一致するはずの動画まで取りこぼしていたため、各並び順で
+// 取得できるだけ全ページ取得するように変更（API側が自然に打ち切るまで）。
+async function searchCandidates(query) {
   const candidateIds = new Set();
-
-  const updateNoteCollecting = () => {
-    if (!note) return;
-    note.textContent = `候補を収集中... ${candidateIds.size}件（絞り込み前）`;
-  };
-  updateNoteCollecting();
-
-  outer:
-  for (const q of queries) {
-    for (const order of SEARCH_ORDERS) {
-      let pageToken = '';
-      try {
-        do {
-          const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=50&type=video&order=${order}&q=${encodeURIComponent(q)}&key=${API_KEY}${pageToken ? '&pageToken=' + pageToken : ''}`;
-          const res = await fetch(url);
-          const data = await res.json();
-          if (!data.items) break;
-          data.items.forEach(item => {
-            const vid = item.id && item.id.videoId;
-            if (vid) candidateIds.add(vid);
-          });
-          updateNoteCollecting();
-          pageToken = data.nextPageToken || '';
-        } while (pageToken);
-      } catch (err) {
-        console.error(`検索失敗 ("${q}" / order=${order}):`, err);
-      }
-      // 候補数が十分になったら、これ以上のクォータ消費を避けて打ち切る
-      // （フィルタで減る分を見込んで目標の2倍程度を目安に候補を集める）
-      if (candidateIds.size >= SEARCH_TARGET_MIN * 2) break outer;
+  for (const order of SEARCH_ORDERS) {
+    let pageToken = '';
+    try {
+      do {
+        const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=50&type=video&order=${order}&q=${encodeURIComponent(query)}&key=${API_KEY}${pageToken ? '&pageToken=' + pageToken : ''}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!data.items) break;
+        data.items.forEach(item => {
+          const vid = item.id && item.id.videoId;
+          if (vid) candidateIds.add(vid);
+        });
+        pageToken = data.nextPageToken || '';
+      } while (pageToken);
+    } catch (err) {
+      console.error(`検索失敗 ("${query}" / order=${order}):`, err);
     }
   }
+  return candidateIds;
+}
 
-  if (note) note.textContent = `候補${candidateIds.size}件を絞り込み中...`;
+/**
+ * HORROR_INM_GROUPS の各グループを完全に独立したキーワードとして検索する。
+ * 以前のように複数キーワードを結合しないため、「短編ホラーINM」のような
+ * 単独では検索対象にならなかったキーワードも正しく処理される。
+ * 「【ホラー淫夢】」と「ホラー淫夢」もそれぞれ別グループ・別リストとして区別する。
+ * 注意: search.list は1回あたり100ユニット消費するため、グループ数・並び順・
+ * ページ数が多いと1日のAPIクォータ(デフォルト10,000ユニット)をすぐに消費します。
+ */
+async function loadHorrorInmGroups(groups) {
+  for (const group of groups) {
+    const container = document.getElementById(group.elementId);
+    const note = document.getElementById(group.elementId + '-note');
+    if (note) note.textContent = `「${group.query}」を検索中...`;
 
-  const detailsMap = await fetchVideoDetailsMap([...candidateIds]);
-  let count = 0;
-  detailsMap.forEach((info, videoId) => {
-    if (matchesKeywords(info.title, info.tags)) {
-      renderVideoData(videoId, info.title, info.thumb, container);
-      count++;
-    }
-  });
+    const candidateIds = await searchCandidates(group.query);
+    if (note) note.textContent = `候補${candidateIds.size}件を絞り込み中...`;
 
-  if (note) {
-    if (count === 0) {
-      note.textContent = 'タイトルに一致する動画が見つかりませんでした';
-    } else if (count < SEARCH_TARGET_MIN) {
-      note.textContent = `絞り込み後: ${count}件（目標${SEARCH_TARGET_MIN}件には届きませんでした）`;
-    } else {
-      note.remove();
+    const detailsMap = await fetchVideoDetailsMap([...candidateIds]);
+    let count = 0;
+    detailsMap.forEach((info, videoId) => {
+      if (group.match(info.title || "")) {
+        renderVideoData(videoId, info.title, info.thumb, container);
+        count++;
+      }
+    });
+
+    if (note) {
+      note.textContent = count === 0
+        ? 'タイトルに一致する動画が見つかりませんでした'
+        : '';
+      if (count > 0) note.remove();
     }
   }
 }
@@ -614,17 +672,6 @@ function renderVideoData(videoId, title, thumb, container) {
 
 function renderVideo(item, container) {
   const videoId = item.snippet.resourceId.videoId;
-  const title = item.snippet.title;
-  const thumb =
-    (item.snippet.thumbnails &&
-      (item.snippet.thumbnails.medium?.url ||
-       item.snippet.thumbnails.default?.url)) || "";
-  renderVideoData(videoId, title, thumb, container);
-}
-
-function renderSearchItem(item, container) {
-  if (!item.id || !item.id.videoId) return;
-  const videoId = item.id.videoId;
   const title = item.snippet.title;
   const thumb =
     (item.snippet.thumbnails &&
@@ -807,7 +854,7 @@ function ccToggleMute() {
 
 playlists.forEach(p => loadPlaylist(p.id, p.elementId));
 loadChannelByHandle(CHANNEL_HANDLE, 'list3');
-loadSearchQueries(SEARCH_QUERIES, 'list4');
+loadHorrorInmGroups(HORROR_INM_GROUPS);
 updatePlayerState();
 </script>
 </body>
