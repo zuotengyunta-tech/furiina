@@ -97,7 +97,7 @@ body {
 .video .meta {
   font-size: 9px;
   line-height: 1.3;
-  margin-top: 4px;
+  margin-top: 3px;
   max-width: 130px;
   color: #888;
 }
@@ -105,7 +105,7 @@ body {
 .video .tag {
   font-size: 9px;
   line-height: 1.3;
-  margin-top: 2px;
+  margin-top: 3px;
   max-width: 130px;
   color: #555;
   font-weight: 600;
@@ -157,7 +157,7 @@ body {
   display: none;
 }
 
-#sidebar.thumbs-hidden .thumb-wrap {
+#sidebar.thumbs-hidden .video .thumb-wrap {
   width: 130px;
   min-height: 50px;
   display: flex;
@@ -184,7 +184,7 @@ body {
   top: 0;
   background: #fff;
   padding: 4px 0 10px;
-  z-index: 2;
+  z-index: 10;
 }
 
 #thumbBtn {
@@ -371,7 +371,7 @@ body {
 }
 
 /* =========================================================
-   非表示時カスタムコントロール
+   非表示時コントロール
 ========================================================= */
 
 #custom-controls {
@@ -448,11 +448,19 @@ body {
 }
 
 /* =========================================================
-   =========================================================
-   JavaScript
-   =========================================================
+   ホラー淫夢取得状況
 ========================================================= */
 
+#horror-status {
+  font-size: 10px;
+  color: #888;
+  padding: 4px 10px;
+  line-height: 1.5;
+}
+
+/* =========================================================
+   JavaScript
+========================================================= */
 </style>
 </head>
 
@@ -465,12 +473,19 @@ body {
 <div id="sidebar">
 
   <div id="sidebar-controls">
-    <button id="thumbBtn" onclick="toggleThumbs()">
+    <button
+      id="thumbBtn"
+      onclick="toggleThumbs()"
+    >
       サムネイルを非表示にする
     </button>
   </div>
 
+
+  <!-- 再生リスト① -->
+
   <div class="playlist">
+
     <div
       class="playlist-title"
       onclick="toggle('list1')"
@@ -482,10 +497,14 @@ body {
       class="videos"
       id="list1"
     ></div>
+
   </div>
 
 
+  <!-- 再生リスト② -->
+
   <div class="playlist">
+
     <div
       class="playlist-title"
       onclick="toggle('list2')"
@@ -497,10 +516,14 @@ body {
       class="videos"
       id="list2"
     ></div>
+
   </div>
 
 
+  <!-- asmrmayona -->
+
   <div class="playlist">
+
     <div
       class="playlist-title"
       onclick="toggle('list3')"
@@ -519,8 +542,11 @@ body {
       class="videos"
       id="list3"
     ></div>
+
   </div>
 
+
+  <!-- ホラー淫夢 -->
 
   <div class="playlist">
 
@@ -532,10 +558,9 @@ body {
     </div>
 
     <div
-      class="loading-note"
-      id="list4-note"
+      id="horror-status"
     >
-      読み込み中...
+      初期化中...
     </div>
 
     <div
@@ -678,10 +703,11 @@ body {
 
 <script src="https://www.youtube.com/iframe_api"></script>
 
+
 <script>
 
 /* =========================================================
-   基本設定
+   API設定
 ========================================================= */
 
 const API_KEY =
@@ -689,7 +715,7 @@ const API_KEY =
 
 
 /* =========================================================
-   プレイリスト
+   通常プレイリスト
 ========================================================= */
 
 const playlists = [
@@ -700,6 +726,7 @@ const playlists = [
 
     elementId:
       "list1"
+
   },
 
   {
@@ -708,6 +735,7 @@ const playlists = [
 
     elementId:
       "list2"
+
   }
 
 ];
@@ -722,23 +750,14 @@ const CHANNEL_HANDLE =
 
 
 /* =========================================================
-   ホラー淫夢検索キーワード
+   ホラー淫夢：タイトル検索語
 ========================================================= */
 
 /*
- * 重要：
+ * ここは「タグ」そのものではなく、
+ * YouTube検索に使う検索語。
  *
- * それぞれ別々に検索する。
- *
- * 特に
- *
- * 【ホラー淫夢】
- *
- * と
- *
- * ホラー淫夢
- *
- * は別タグとして扱う。
+ * それぞれ完全に独立して検索する。
  */
 
 const FILTER_KEYWORDS = [
@@ -759,17 +778,14 @@ const FILTER_KEYWORDS = [
 
 
 /* =========================================================
-   特定チャンネル
+   ホラー淫夢：取得対象チャンネル
 ========================================================= */
 
 /*
- * ここは「タグ」ではない。
+ * これはタグではない。
  *
- * このチャンネルの動画を取得するための
- * 取得元として使用する。
- *
- * 取得した動画については、
- * タイトルからタグを判定する。
+ * 「このチャンネルの動画を取得する」
+ * ための取得元。
  */
 
 const KNOWN_CHANNELS = [
@@ -782,27 +798,8 @@ const KNOWN_CHANNELS = [
 
 
 /* =========================================================
-   検索設定
+   YouTube検索の並び順
 ========================================================= */
-
-/*
- * relevance
- * viewCount
- * date
- *
- * の3種類を使って検索結果の取りこぼしを減らす。
- *
- * 1回の検索につき最大50件。
- *
- * MAX_SEARCH_PAGES = 3
- * なら1キーワード・1並び順につき最大150件。
- *
- * 6キーワード × 3並び順 × 3ページ
- * = 最大54回のsearch.list。
- *
- * YouTube APIのsearch.listは1回100ユニットなので、
- * クォータ消費には注意。
- */
 
 const SEARCH_ORDERS = [
 
@@ -815,13 +812,26 @@ const SEARCH_ORDERS = [
 ];
 
 
-const MAX_SEARCH_PAGES = 3;
-
+/* =========================================================
+   検索ページ数
+========================================================= */
 
 /*
- * チャンネル検索は10件程度取得して、
- * 完全一致を最優先する。
+ * search.list は1回100ユニット。
+ *
+ * 3並び順 × 4ページ × 6キーワード
+ * = 最大72回
+ * = 最大7200ユニット。
+ *
+ * APIクォータを考慮して4ページに設定。
  */
+
+const MAX_SEARCH_PAGES = 4;
+
+
+/* =========================================================
+   チャンネル検索結果数
+========================================================= */
 
 const CHANNEL_RESOLVE_RESULTS = 10;
 
@@ -853,11 +863,99 @@ let isSeeking =
 
 
 /* =========================================================
-   ホラー動画重複管理
+   ホラー動画の重複防止
 ========================================================= */
 
 const horrorVideoIds =
   new Set();
+
+
+/* =========================================================
+   ホラー動画の一時保存
+========================================================= */
+
+const horrorVideos =
+  new Map();
+
+
+/* =========================================================
+   ステータス表示
+========================================================= */
+
+function setHorrorStatus(
+  text
+) {
+
+  const el =
+    document.getElementById(
+      "horror-status"
+    );
+
+
+  if (el) {
+
+    el.textContent =
+      text;
+
+  }
+
+}
+
+
+/* =========================================================
+   JSON取得
+========================================================= */
+
+async function fetchJson(
+  url
+) {
+
+  const response =
+    await fetch(
+      url
+    );
+
+
+  let data;
+
+
+  try {
+
+    data =
+      await response.json();
+
+  } catch (e) {
+
+    throw new Error(
+      `JSON解析失敗 HTTP ${response.status}`
+    );
+
+  }
+
+
+  if (!response.ok) {
+
+    throw new Error(
+      data?.error?.message ||
+      `HTTP ${response.status}`
+    );
+
+  }
+
+
+  if (data?.error) {
+
+    throw new Error(
+      data.error.message ||
+      "YouTube API error"
+    );
+
+  }
+
+
+  return data;
+
+}
 
 
 /* =========================================================
@@ -920,7 +1018,6 @@ function onYouTubeIframeAPIReady() {
 
               },
 
-
             onStateChange:
               onPlayerStateChange
 
@@ -936,73 +1033,29 @@ function onYouTubeIframeAPIReady() {
    プレイヤー状態
 ========================================================= */
 
-function onPlayerStateChange(e) {
+function onPlayerStateChange(
+  e
+) {
 
   const playing =
     e.data ===
     YT.PlayerState.PLAYING;
 
 
-  document.getElementById(
-    "ccPlayBtn"
-  ).textContent =
-    playing
-      ? "❚❚"
-      : "▶";
-
-}
-
-
-/* =========================================================
-   JSONレスポンス確認
-========================================================= */
-
-async function fetchJson(url) {
-
-  const response =
-    await fetch(url);
-
-
-  let data;
-
-  try {
-
-    data =
-      await response.json();
-
-  } catch (e) {
-
-    throw new Error(
-      `JSON解析失敗 HTTP ${response.status}`
+  const btn =
+    document.getElementById(
+      "ccPlayBtn"
     );
 
-  }
 
+  if (btn) {
 
-  if (!response.ok) {
-
-    const message =
-      data?.error?.message ||
-      `HTTP ${response.status}`;
-
-    throw new Error(
-      message
-    );
+    btn.textContent =
+      playing
+        ? "❚❚"
+        : "▶";
 
   }
-
-
-  if (data?.error) {
-
-    throw new Error(
-      data.error.message ||
-      "YouTube API error"
-    );
-
-  }
-
-
-  return data;
 
 }
 
@@ -1035,11 +1088,11 @@ async function loadPlaylist(
 
       const url =
 
-        `https://www.googleapis.com/youtube/v3/playlistItems` +
+        "https://www.googleapis.com/youtube/v3/playlistItems" +
 
-        `?part=snippet` +
+        "?part=snippet" +
 
-        `&maxResults=50` +
+        "&maxResults=50" +
 
         `&playlistId=${encodeURIComponent(playlistId)}` +
 
@@ -1053,7 +1106,9 @@ async function loadPlaylist(
 
 
       const data =
-        await fetchJson(url);
+        await fetchJson(
+          url
+        );
 
 
       if (
@@ -1092,11 +1147,14 @@ async function loadPlaylist(
 
 
   items.forEach(
-    item =>
+    item => {
+
       renderVideo(
         item,
         container
-      )
+      );
+
+    }
   );
 
 
@@ -1124,9 +1182,9 @@ async function loadChannelByHandle(
 
     const url =
 
-      `https://www.googleapis.com/youtube/v3/channels` +
+      "https://www.googleapis.com/youtube/v3/channels" +
 
-      `?part=contentDetails` +
+      "?part=contentDetails" +
 
       `&forHandle=${encodeURIComponent(handle)}` +
 
@@ -1134,7 +1192,9 @@ async function loadChannelByHandle(
 
 
     const data =
-      await fetchJson(url);
+      await fetchJson(
+        url
+      );
 
 
     const uploadsId =
@@ -1183,7 +1243,7 @@ async function loadChannelByHandle(
     if (note) {
 
       note.textContent =
-        `読み込み失敗: ${err.message}`;
+        `読み込みに失敗しました: ${err.message}`;
 
     }
 
@@ -1230,9 +1290,9 @@ async function fetchVideoDetailsMap(
 
       const url =
 
-        `https://www.googleapis.com/youtube/v3/videos` +
+        "https://www.googleapis.com/youtube/v3/videos" +
 
-        `?part=snippet` +
+        "?part=snippet" +
 
         `&id=${chunk.join(",")}` +
 
@@ -1240,7 +1300,9 @@ async function fetchVideoDetailsMap(
 
 
       const data =
-        await fetchJson(url);
+        await fetchJson(
+          url
+        );
 
 
       if (
@@ -1264,15 +1326,14 @@ async function fetchVideoDetailsMap(
                 "",
 
               thumb:
-                (
-                  video.snippet?.thumbnails?.medium?.url ||
 
-                  video.snippet?.thumbnails?.high?.url ||
+                video.snippet?.thumbnails?.medium?.url ||
 
-                  video.snippet?.thumbnails?.default?.url ||
+                video.snippet?.thumbnails?.high?.url ||
 
-                  ""
-                ),
+                video.snippet?.thumbnails?.default?.url ||
+
+                "",
 
               channelTitle:
                 video.snippet?.channelTitle ||
@@ -1303,14 +1364,8 @@ async function fetchVideoDetailsMap(
 
 
 /* =========================================================
-   キーワード検索
+   検索候補取得
 ========================================================= */
-
-/*
- * キーワードを結合しない。
- *
- * 1キーワードずつ完全に独立して検索する。
- */
 
 async function searchCandidates(
   query
@@ -1327,7 +1382,7 @@ async function searchCandidates(
     let pageToken =
       "";
 
-    let pageCount =
+    let page =
       0;
 
 
@@ -1335,18 +1390,18 @@ async function searchCandidates(
 
       do {
 
-        pageCount++;
+        page++;
 
 
         const url =
 
-          `https://www.googleapis.com/youtube/v3/search` +
+          "https://www.googleapis.com/youtube/v3/search" +
 
-          `?part=snippet` +
+          "?part=snippet" +
 
-          `&maxResults=50` +
+          "&maxResults=50" +
 
-          `&type=video` +
+          "&type=video" +
 
           `&order=${encodeURIComponent(order)}` +
 
@@ -1362,7 +1417,9 @@ async function searchCandidates(
 
 
         const data =
-          await fetchJson(url);
+          await fetchJson(
+            url
+          );
 
 
         if (
@@ -1398,12 +1455,8 @@ async function searchCandidates(
           "";
 
 
-        /*
-         * 設定ページ数を超えたら停止。
-         */
-
         if (
-          pageCount >=
+          page >=
           MAX_SEARCH_PAGES
         ) {
 
@@ -1420,11 +1473,8 @@ async function searchCandidates(
     } catch (err) {
 
       console.error(
-
-        `検索失敗: "${query}" / ${order}`,
-
+        `検索失敗: ${query} / ${order}`,
         err
-
       );
 
     }
@@ -1438,7 +1488,7 @@ async function searchCandidates(
 
 
 /* =========================================================
-   チャンネル名からチャンネルIDを特定
+   チャンネル名 → チャンネルID
 ========================================================= */
 
 async function resolveChannelIdByName(
@@ -1449,11 +1499,11 @@ async function resolveChannelIdByName(
 
     const url =
 
-      `https://www.googleapis.com/youtube/v3/search` +
+      "https://www.googleapis.com/youtube/v3/search" +
 
-      `?part=snippet` +
+      "?part=snippet" +
 
-      `&type=channel` +
+      "&type=channel" +
 
       `&maxResults=${CHANNEL_RESOLVE_RESULTS}` +
 
@@ -1463,12 +1513,18 @@ async function resolveChannelIdByName(
 
 
     const data =
-      await fetchJson(url);
+      await fetchJson(
+        url
+      );
+
+
+    const items =
+      data.items ||
+      [];
 
 
     if (
-      !data.items ||
-      data.items.length === 0
+      items.length === 0
     ) {
 
       return null;
@@ -1477,11 +1533,11 @@ async function resolveChannelIdByName(
 
 
     /*
-     * まず完全一致。
+     * ① チャンネル名完全一致
      */
 
     const exact =
-      data.items.find(
+      items.find(
         item =>
           item.snippet?.channelTitle ===
           nameQuery
@@ -1499,12 +1555,11 @@ async function resolveChannelIdByName(
 
 
     /*
-     * 完全一致がなければ、
-     * チャンネルタイトルに検索語が含まれるもの。
+     * ② チャンネル名部分一致
      */
 
     const partial =
-      data.items.find(
+      items.find(
         item =>
           (
             item.snippet?.channelTitle ||
@@ -1526,11 +1581,11 @@ async function resolveChannelIdByName(
 
 
     /*
-     * 最後に検索1位。
+     * ③ 最後に1位
      */
 
     return (
-      data.items[0]?.id?.channelId ||
+      items[0]?.id?.channelId ||
       null
     );
 
@@ -1538,11 +1593,8 @@ async function resolveChannelIdByName(
   } catch (err) {
 
     console.error(
-
-      `チャンネル解決失敗: "${nameQuery}"`,
-
+      `チャンネル検索失敗: ${nameQuery}`,
       err
-
     );
 
 
@@ -1554,7 +1606,7 @@ async function resolveChannelIdByName(
 
 
 /* =========================================================
-   チャンネルのアップロード全取得
+   チャンネルのアップロード動画取得
 ========================================================= */
 
 async function fetchChannelUploadsMap(
@@ -1569,9 +1621,9 @@ async function fetchChannelUploadsMap(
 
     const channelUrl =
 
-      `https://www.googleapis.com/youtube/v3/channels` +
+      "https://www.googleapis.com/youtube/v3/channels" +
 
-      `?part=contentDetails` +
+      "?part=contentDetails" +
 
       `&id=${encodeURIComponent(channelId)}` +
 
@@ -1607,11 +1659,11 @@ async function fetchChannelUploadsMap(
 
       const url =
 
-        `https://www.googleapis.com/youtube/v3/playlistItems` +
+        "https://www.googleapis.com/youtube/v3/playlistItems" +
 
-        `?part=snippet` +
+        "?part=snippet" +
 
-        `&maxResults=50` +
+        "&maxResults=50" +
 
         `&playlistId=${encodeURIComponent(uploadsId)}` +
 
@@ -1625,7 +1677,9 @@ async function fetchChannelUploadsMap(
 
 
       const data =
-        await fetchJson(url);
+        await fetchJson(
+          url
+        );
 
 
       if (
@@ -1698,7 +1752,7 @@ async function fetchChannelUploadsMap(
   } catch (err) {
 
     console.error(
-      "チャンネル投稿一覧取得失敗:",
+      "チャンネル動画取得失敗:",
       err
     );
 
@@ -1711,26 +1765,18 @@ async function fetchChannelUploadsMap(
 
 
 /* =========================================================
-   タイトルからタグ取得
+   ★タイトルからタグを取得
 ========================================================= */
 
 /*
- * ★今回の最重要部分
+ * ここが今回の最重要部分。
  *
- * タグはタイトルだけから取得する。
+ * 「検索キーワード」ではタグを決めない。
  *
- * 判定順序が非常に重要。
+ * 実際の動画タイトルだけを見て決める。
  *
- * 「【ホラー淫夢】」
- * を先に判定することで、
- *
- * 【ホラー淫夢】○○
- *
- * が
- *
- * ホラー淫夢
- *
- * にも分類されることを防止する。
+ * また、包含関係があるため、
+ * 長い・特殊なタグから先に判定する。
  */
 
 function getTitleTag(
@@ -1743,6 +1789,8 @@ function getTitleTag(
 
   /*
    * ① 【ホラー淫夢】
+   *
+   * 「ホラー淫夢」とは別物。
    */
 
   if (
@@ -1758,6 +1806,8 @@ function getTitleTag(
 
   /*
    * ② ショートホラー淫夢
+   *
+   * 通常の「ホラー淫夢」に吸収しない。
    */
 
   if (
@@ -1772,22 +1822,7 @@ function getTitleTag(
 
 
   /*
-   * ③ 短編ホラーINM
-   */
-
-  if (
-    t.includes(
-      "短編ホラーINM"
-    )
-  ) {
-
-    return "短編ホラーINM";
-
-  }
-
-
-  /*
-   * ④ 社会派ホラー淫夢
+   * ③ 社会派ホラー淫夢
    */
 
   if (
@@ -1797,6 +1832,21 @@ function getTitleTag(
   ) {
 
     return "社会派ホラー淫夢";
+
+  }
+
+
+  /*
+   * ④ 短編ホラーINM
+   */
+
+  if (
+    t.includes(
+      "短編ホラーINM"
+    )
+  ) {
+
+    return "短編ホラーINM";
 
   }
 
@@ -1819,7 +1869,8 @@ function getTitleTag(
   /*
    * ⑥ 通常のホラー淫夢
    *
-   * 【ホラー淫夢】は既に上で処理済み。
+   * 上の特殊タグを全部先に処理したので、
+   * 【ホラー淫夢】などがここへ来ることはない。
    */
 
   if (
@@ -1833,32 +1884,151 @@ function getTitleTag(
   }
 
 
-  /*
-   * 該当なし
-   */
-
   return "";
 
 }
 
 
 /* =========================================================
-   タイトルが検索対象か
+   タイトルに対象タグがあるか
 ========================================================= */
 
-function matchesHorrorTitle(
+function hasHorrorTag(
   title
 ) {
 
   return (
-    getTitleTag(title) !== ""
+    getTitleTag(
+      title
+    ) !== ""
   );
 
 }
 
 
 /* =========================================================
-   ホラー淫夢シリーズ読み込み
+   ホラー動画を追加
+========================================================= */
+
+function addHorrorVideo(
+  videoId,
+  info,
+  source,
+  sourceType
+) {
+
+  if (!videoId) {
+
+    return;
+
+  }
+
+
+  /*
+   * タイトルからタグを取得。
+   */
+
+  const tag =
+    getTitleTag(
+      info.title
+    );
+
+
+  /*
+   * 検索結果の場合、
+   * タイトルに対象タグがなければ入れない。
+   *
+   * チャンネル取得の場合は、
+   * 「取得できた動画を捨てない」。
+   */
+
+  if (
+    sourceType === "search" &&
+    !tag
+  ) {
+
+    return;
+
+  }
+
+
+  /*
+   * 同じ動画が検索とチャンネルの両方に
+   * 登場しても1件だけ。
+   */
+
+  if (
+    horrorVideos.has(
+      videoId
+    )
+  ) {
+
+    /*
+     * 既存データにタグを追加。
+     */
+
+    const existing =
+      horrorVideos.get(
+        videoId
+      );
+
+
+    const actualTag =
+      getTitleTag(
+        existing.title
+      );
+
+
+    existing.tag =
+      actualTag ||
+      existing.tag ||
+      "タグなし";
+
+
+    return;
+
+  }
+
+
+  horrorVideos.set(
+    videoId,
+    {
+
+      videoId,
+
+      title:
+        info.title ||
+        "",
+
+      thumb:
+        info.thumb ||
+        "",
+
+      channelTitle:
+        info.channelTitle ||
+        "",
+
+      tag:
+        tag ||
+        "タグなし",
+
+      source:
+        source ||
+        info.channelTitle ||
+        "不明",
+
+      sourceType:
+        sourceType ||
+        "unknown"
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   ★ホラー淫夢シリーズ全体取得
 ========================================================= */
 
 async function loadHorrorInmContent() {
@@ -1869,41 +2039,37 @@ async function loadHorrorInmContent() {
     );
 
 
-  const note =
-    document.getElementById(
-      "list4-note"
-    );
+  /*
+   * 念のため初期化。
+   */
+
+  horrorVideos.clear();
+
+  horrorVideoIds.clear();
 
 
   /*
-   * videoIdをキーにする。
-   *
-   * 同じ動画が
-   *
-   * ・チャンネル取得
-   * ・検索
-   *
-   * の両方から来ても1件だけ。
+   * 画面を空にする。
    */
 
-  const combined =
-    new Map();
+  container.innerHTML =
+    "";
 
 
   /* =====================================================
-     ① 醜女ちゃんネル・おんちゃを取得
+     STEP 1
+     醜女ちゃんネル
+     おんちゃ
+     の動画を丸ごと取得
   ===================================================== */
 
   for (
     const channelName of KNOWN_CHANNELS
   ) {
 
-    if (note) {
-
-      note.textContent =
-        `「${channelName}」を取得中...`;
-
-    }
+    setHorrorStatus(
+      `「${channelName}」を検索中...`
+    );
 
 
     const channelId =
@@ -1915,20 +2081,23 @@ async function loadHorrorInmContent() {
     if (!channelId) {
 
       console.warn(
-        `チャンネルを特定できませんでした: ${channelName}`
+        `チャンネルが見つかりません: ${channelName}`
       );
+
+
+      setHorrorStatus(
+        `「${channelName}」が見つからないため次へ`
+      );
+
 
       continue;
 
     }
 
 
-    if (note) {
-
-      note.textContent =
-        `「${channelName}」の動画を取得中...`;
-
-    }
+    setHorrorStatus(
+      `「${channelName}」の動画を取得中...`
+    );
 
 
     const uploads =
@@ -1938,62 +2107,54 @@ async function loadHorrorInmContent() {
 
 
     /*
-     * ★重要
+     * ★ここではタイトルで捨てない。
      *
-     * ここではタイトルによる除外をしない。
+     * 取得した動画を全部登録する。
      *
-     * 取得した動画は全部combinedへ入れる。
-     *
-     * 以前はここでFILTER_KEYWORDSに一致しない
-     * 動画を捨てていた。
+     * これが以前との大きな違い。
      */
 
     uploads.forEach(
-      (info, videoId) => {
+      (
+        info,
+        videoId
+      ) => {
 
-        if (
-          !combined.has(
-            videoId
-          )
-        ) {
+        addHorrorVideo(
 
-          combined.set(
-            videoId,
-            {
+          videoId,
 
-              ...info,
+          info,
 
-              source:
-                channelName,
+          channelName,
 
-              sourceType:
-                "channel"
+          "channel"
 
-            }
-          );
-
-        }
+        );
 
       }
+    );
+
+
+    setHorrorStatus(
+      `「${channelName}」から ${uploads.size}件取得`
     );
 
   }
 
 
   /* =====================================================
-     ② タイトルキーワード検索
+     STEP 2
+     タイトルキーワード検索
   ===================================================== */
 
   for (
     const keyword of FILTER_KEYWORDS
   ) {
 
-    if (note) {
-
-      note.textContent =
-        `「${keyword}」を検索中...`;
-
-    }
+    setHorrorStatus(
+      `「${keyword}」を検索中... 現在 ${horrorVideos.size}件`
+    );
 
 
     const candidateIds =
@@ -2002,30 +2163,34 @@ async function loadHorrorInmContent() {
       );
 
 
-    if (note) {
-
-      note.textContent =
-        `「${keyword}」候補 ${candidateIds.size}件を確認中...`;
-
-    }
+    setHorrorStatus(
+      `「${keyword}」候補 ${candidateIds.size}件を確認中...`
+    );
 
 
     /*
-     * IDから正式なタイトル・サムネイルを取得。
+     * 候補IDからタイトルを取得。
      */
 
-    const detailsMap =
+    const details =
       await fetchVideoDetailsMap(
         [...candidateIds]
       );
 
 
-    detailsMap.forEach(
-      (info, videoId) => {
+    let matched =
+      0;
+
+
+    details.forEach(
+      (
+        info,
+        videoId
+      ) => {
 
         /*
-         * 検索語ではなく、
-         * 必ずタイトルそのものから判定する。
+         * ★検索語ではなく、
+         * 実際のタイトルからタグ判定。
          */
 
         const tag =
@@ -2034,14 +2199,6 @@ async function loadHorrorInmContent() {
           );
 
 
-        /*
-         * タイトルに対象語がなければ除外。
-         *
-         * YouTube検索結果には、
-         * 検索語と完全一致しないものが
-         * 混ざることがあるため。
-         */
-
         if (!tag) {
 
           return;
@@ -2049,57 +2206,38 @@ async function loadHorrorInmContent() {
         }
 
 
-        /*
-         * 既にチャンネル取得済みなら
-         * そちらを優先。
-         */
-
-        if (
-          combined.has(
-            videoId
-          )
-        ) {
-
-          const existing =
-            combined.get(
-              videoId
-            );
+        matched++;
 
 
-          /*
-           * タグは後でタイトルから再取得。
-           */
+        addHorrorVideo(
 
-          existing.tag =
-            tag;
-
-
-          return;
-
-        }
-
-
-        /*
-         * 新規追加。
-         */
-
-        combined.set(
           videoId,
-          {
 
-            ...info,
+          info,
 
-            source:
-              info.channelTitle ||
-              "検索",
+          info.channelTitle,
 
-            sourceType:
-              "search",
+          "search"
 
-            tag
-
-          }
         );
+
+      }
+    );
+
+
+    console.log(
+      `[ホラー淫夢] ${keyword}`,
+      {
+        candidate:
+          candidateIds.size,
+
+        details:
+          details.size,
+
+        matched,
+
+        total:
+          horrorVideos.size
 
       }
     );
@@ -2108,180 +2246,98 @@ async function loadHorrorInmContent() {
 
 
   /* =====================================================
-     ③ 表示
+     STEP 3
+     表示
   ===================================================== */
 
-  /*
-   * タイトルからタグを再計算。
-   *
-   * チャンネル取得動画についても
-   * タイトルからタグを取得する。
-   */
-
-  const videos =
-    [];
+  let count =
+    0;
 
 
-  combined.forEach(
-    (info, videoId) => {
-
-      const tag =
-        getTitleTag(
-          info.title
-        );
-
-
-      /*
-       * タグがある場合
-       */
-
-      if (tag) {
-
-        videos.push({
-
-          videoId,
-
-          ...info,
-
-          tag
-
-        });
-
-        return;
-
-      }
-
-
-      /*
-       * タグがない場合
-       *
-       * 醜女ちゃんネル・おんちゃから
-       * 「取得できた動画」を捨てない。
-       *
-       * その代わり「タグなし」と表示する。
-       */
-
-      if (
-        info.sourceType ===
-        "channel"
-      ) {
-
-        videos.push({
-
-          videoId,
-
-          ...info,
-
-          tag:
-            "タグなし"
-
-        });
-
-      }
-
-    }
-  );
-
-
-  /*
-   * 表示順。
-   *
-   * 取得された順序を基本的に維持。
-   */
-
-  videos.forEach(
+  horrorVideos.forEach(
     video => {
 
-      renderVideoData(
-
-        video.videoId,
-
-        video.title,
-
-        video.thumb,
-
-        container,
-
-        video.tag,
-
-        video.source
-
+      renderHorrorVideo(
+        video,
+        container
       );
+
+
+      count++;
 
     }
   );
 
 
-  const count =
-    videos.length;
+  /* =====================================================
+     結果表示
+  ===================================================== */
+
+  if (
+    count === 0
+  ) {
+
+    setHorrorStatus(
+      "動画を取得できませんでした。F12のConsoleに詳細を表示しています。"
+    );
 
 
-  if (note) {
+  } else {
 
-    if (
-      count === 0
-    ) {
-
-      note.textContent =
-        "動画を取得できませんでした";
-
-    } else {
-
-      note.textContent =
-        `${count}件取得`;
-
-    }
+    setHorrorStatus(
+      `${count}件取得`
+    );
 
   }
 
 
   console.log(
-    "ホラー淫夢シリーズ取得結果:",
-    {
+    "========================================"
+  );
 
-      total:
-        count,
+  console.log(
+    "ホラー淫夢シリーズ 最終取得結果"
+  );
 
-      sources:
-        KNOWN_CHANNELS,
+  console.log(
+    "動画数:",
+    count
+  );
 
-      keywords:
-        FILTER_KEYWORDS
+  console.log(
+    "取得元:",
+    KNOWN_CHANNELS
+  );
 
-    }
+  console.log(
+    "検索語:",
+    FILTER_KEYWORDS
+  );
+
+  console.log(
+    "動画一覧:",
+    [...horrorVideos.values()]
+  );
+
+  console.log(
+    "========================================"
   );
 
 }
 
 
 /* =========================================================
-   動画表示
+   ホラー動画表示
 ========================================================= */
 
-function renderVideoData(
-
-  videoId,
-
-  title,
-
-  thumb,
-
-  container,
-
-  tag,
-
-  source
-
+function renderHorrorVideo(
+  video,
+  container
 ) {
-
-  /*
-   * 同じvideoIdが既に表示されていたら
-   * 二重表示しない。
-   */
 
   if (
     horrorVideoIds.has(
-      videoId
+      video.videoId
     )
   ) {
 
@@ -2291,8 +2347,237 @@ function renderVideoData(
 
 
   horrorVideoIds.add(
-    videoId
+    video.videoId
   );
+
+
+  const div =
+    document.createElement(
+      "div"
+    );
+
+
+  div.className =
+    "video";
+
+
+  div.dataset.videoId =
+    video.videoId;
+
+
+  /* =====================================================
+     サムネイル
+  ===================================================== */
+
+  const thumbWrap =
+    document.createElement(
+      "div"
+    );
+
+
+  thumbWrap.className =
+    "thumb-wrap";
+
+
+  const img =
+    document.createElement(
+      "img"
+    );
+
+
+  img.src =
+    video.thumb ||
+    `https://i.ytimg.com/vi/${video.videoId}/mqdefault.jpg`;
+
+
+  img.alt =
+    video.title;
+
+
+  img.loading =
+    "lazy";
+
+
+  /* =====================================================
+     タイトル
+  ===================================================== */
+
+  const titleEl =
+    document.createElement(
+      "div"
+    );
+
+
+  titleEl.className =
+    "title";
+
+
+  titleEl.textContent =
+    video.title;
+
+
+  /* =====================================================
+     タグ
+  ===================================================== */
+
+  const tagEl =
+    document.createElement(
+      "div"
+    );
+
+
+  tagEl.className =
+    "tag";
+
+
+  tagEl.textContent =
+    `タグ：${video.tag}`;
+
+
+  /* =====================================================
+     取得元
+  ===================================================== */
+
+  const metaEl =
+    document.createElement(
+      "div"
+    );
+
+
+  metaEl.className =
+    "meta";
+
+
+  metaEl.textContent =
+    `取得元：${video.source}`;
+
+
+  thumbWrap.appendChild(
+    img
+  );
+
+
+  thumbWrap.appendChild(
+    titleEl
+  );
+
+
+  thumbWrap.appendChild(
+    tagEl
+  );
+
+
+  thumbWrap.appendChild(
+    metaEl
+  );
+
+
+  thumbWrap.onclick =
+    () =>
+      play(
+        video.videoId,
+        div
+      );
+
+
+  /* =====================================================
+     再生ボタン
+  ===================================================== */
+
+  const right =
+    document.createElement(
+      "div"
+    );
+
+
+  right.className =
+    "right";
+
+
+  const playBtn =
+    document.createElement(
+      "button"
+    );
+
+
+  playBtn.className =
+    "play-btn";
+
+
+  playBtn.textContent =
+    "▶";
+
+
+  playBtn.title =
+    "再生";
+
+
+  playBtn.onclick =
+    () =>
+      play(
+        video.videoId,
+        div
+      );
+
+
+  right.appendChild(
+    playBtn
+  );
+
+
+  div.appendChild(
+    thumbWrap
+  );
+
+
+  div.appendChild(
+    right
+  );
+
+
+  container.appendChild(
+    div
+  );
+
+}
+
+
+/* =========================================================
+   通常動画表示
+========================================================= */
+
+function renderVideo(
+  item,
+  container
+) {
+
+  const videoId =
+    item.snippet
+      ?.resourceId
+      ?.videoId;
+
+
+  if (!videoId) {
+
+    return;
+
+  }
+
+
+  const title =
+    item.snippet?.title ||
+    "";
+
+
+  const thumb =
+
+    item.snippet?.thumbnails?.medium?.url ||
+
+    item.snippet?.thumbnails?.high?.url ||
+
+    item.snippet?.thumbnails?.default?.url ||
+
+    "";
 
 
   const div =
@@ -2308,10 +2593,6 @@ function renderVideoData(
   div.dataset.videoId =
     videoId;
 
-
-  /* =====================================================
-     サムネイル
-  ===================================================== */
 
   const thumbWrap =
     document.createElement(
@@ -2341,10 +2622,6 @@ function renderVideoData(
     "lazy";
 
 
-  /* =====================================================
-     タイトル
-  ===================================================== */
-
   const titleEl =
     document.createElement(
       "div"
@@ -2359,42 +2636,6 @@ function renderVideoData(
     title;
 
 
-  /* =====================================================
-     タグ
-  ===================================================== */
-
-  const tagEl =
-    document.createElement(
-      "div"
-    );
-
-
-  tagEl.className =
-    "tag";
-
-
-  tagEl.textContent =
-    `タグ：${tag}`;
-
-
-  /* =====================================================
-     取得元
-  ===================================================== */
-
-  const metaEl =
-    document.createElement(
-      "div"
-    );
-
-
-  metaEl.className =
-    "meta";
-
-
-  metaEl.textContent =
-    `取得元：${source || "不明"}`;
-
-
   thumbWrap.appendChild(
     img
   );
@@ -2405,16 +2646,6 @@ function renderVideoData(
   );
 
 
-  thumbWrap.appendChild(
-    tagEl
-  );
-
-
-  thumbWrap.appendChild(
-    metaEl
-  );
-
-
   thumbWrap.onclick =
     () =>
       play(
@@ -2422,10 +2653,6 @@ function renderVideoData(
         div
       );
 
-
-  /* =====================================================
-     再生ボタン
-  ===================================================== */
 
   const right =
     document.createElement(
@@ -2486,64 +2713,6 @@ function renderVideoData(
 
 
 /* =========================================================
-   通常プレイリスト動画
-========================================================= */
-
-function renderVideo(
-  item,
-  container
-) {
-
-  const videoId =
-    item.snippet
-      ?.resourceId
-      ?.videoId;
-
-
-  if (!videoId) {
-
-    return;
-
-  }
-
-
-  const title =
-    item.snippet?.title ||
-    "";
-
-
-  const thumb =
-
-    item.snippet?.thumbnails?.medium?.url ||
-
-    item.snippet?.thumbnails?.high?.url ||
-
-    item.snippet?.thumbnails?.default?.url ||
-
-    "";
-
-
-  renderVideoData(
-
-    videoId,
-
-    title,
-
-    thumb,
-
-    container,
-
-    "",
-
-    item.snippet?.channelTitle ||
-      ""
-
-  );
-
-}
-
-
-/* =========================================================
    開閉
 ========================================================= */
 
@@ -2576,7 +2745,7 @@ function toggle(
 
 
 /* =========================================================
-   動画再生
+   再生
 ========================================================= */
 
 function play(
@@ -2635,17 +2804,6 @@ function play(
 
     }
 
-
-    if (isHidden) {
-
-      try {
-
-        player.playVideo();
-
-      } catch (e) {}
-
-    }
-
   }
 
 
@@ -2655,7 +2813,7 @@ function play(
 
 
 /* =========================================================
-   プレイヤー状態更新
+   プレイヤー状態
 ========================================================= */
 
 function updatePlayerState() {
@@ -2706,7 +2864,7 @@ function updatePlayerState() {
 
 
 /* =========================================================
-   サムネイル切り替え
+   サムネイル表示切り替え
 ========================================================= */
 
 function toggleThumbs() {
@@ -2950,7 +3108,7 @@ function formatTime(
 
 
 /* =========================================================
-   進捗監視開始
+   進捗監視
 ========================================================= */
 
 function startProgressTracking() {
@@ -3096,7 +3254,7 @@ function ccTogglePlay() {
 
 
 /* =========================================================
-   シーク操作
+   シーク
 ========================================================= */
 
 function ccOnSeekInput() {
@@ -3343,7 +3501,6 @@ loadHorrorInmContent();
  */
 
 updatePlayerState();
-
 
 </script>
 
