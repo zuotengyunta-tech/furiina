@@ -1135,11 +1135,14 @@ const HORROR_SEARCH_KEYWORDS = [
 ========================================================= */
 
 const KNOWN_CHANNELS = [
-
-    "醜女ちゃんネル",
-
-    "おんちゃ"
-
+    {
+        name: "醜女ちゃんネル",
+        handle: "@醜女ちゃんネル"
+    },
+    {
+        name: "おんちゃ",
+        handle: "@おんちゃ"
+    }
 ];
 
 
@@ -1169,7 +1172,7 @@ const SEARCH_CACHE_KEY =
  */
 
 const SEARCH_CACHE_TTL =
-    6 * 60 * 60 * 1000;
+    24 * 60 * 60 * 1000;
 
 
 /* =========================================================
@@ -2147,150 +2150,47 @@ function saveChannelCache(
    チャンネル名検索
 ========================================================= */
 
-async function resolveChannelIdByName(
-    name
+async function resolveChannelIdByHandle(
+    channel
 ) {
 
-    const cache =
-        getChannelCache();
+    const name = channel.name;
+    const handle = channel.handle;
+    const cache = getChannelCache();
 
-
-    /*
-     * 以前取得したIDがあれば
-     * search.listを使わない。
-     */
-
-    if (
-        cache[name]
-    ) {
-
-        console.log(
-            `[ホラー淫夢] キャッシュ済みチャンネルID: ${name}`
-        );
-
-
+    if (cache[name]) {
+        console.log(`[ホラー淫夢] キャッシュ済みチャンネルID: ${name}`);
         return cache[name];
-
     }
 
-
-    /*
-     * 初回だけ検索。
-     */
+    if (!handle) {
+        console.warn(`[ホラー淫夢] ${name}: handle未設定`);
+        return null;
+    }
 
     const url =
-
-        "https://www.googleapis.com/youtube/v3/search" +
-
-        "?part=snippet" +
-
-        "&type=channel" +
-
-        "&maxResults=10" +
-
-        `&q=${encodeURIComponent(name)}` +
-
+        "https://www.googleapis.com/youtube/v3/channels" +
+        "?part=id" +
+        `&forHandle=${encodeURIComponent(handle)}` +
         `&key=${encodeURIComponent(API_KEY)}`;
 
-
-    let data;
-
-
     try {
+        const data = await fetchJson(url);
+        const channelId = data.items?.[0]?.id || null;
 
-        data =
-            await fetchJson(
-                url
-            );
-
-
-    } catch (error) {
-
-        if (
-            String(
-                error.message
-            ).includes(
-                "Quota exceeded"
-            )
-        ) {
-
-            throw new Error(
-                `「${name}」のチャンネルIDを初回取得できません。YouTube APIの検索クォータが回復してから一度実行してください。`
-            );
-
+        if (channelId) {
+            cache[name] = channelId;
+            saveChannelCache(cache);
+            console.log(`[ホラー淫夢] チャンネルID取得: ${name} -> ${channelId}`);
+        } else {
+            console.warn(`[ホラー淫夢] チャンネルが見つかりません: ${name} (${handle})`);
         }
 
-
-        throw error;
-
+        return channelId;
+    } catch (error) {
+        console.error(`[ホラー淫夢] チャンネルID取得失敗: ${name}`, error);
+        return null;
     }
-
-
-    const items =
-        data.items || [];
-
-
-    /*
-     * 完全一致を最優先。
-     */
-
-    const exact =
-        items.find(
-            item =>
-                item.snippet?.channelTitle ===
-                name
-        );
-
-
-    let channelId =
-        exact?.id?.channelId ||
-        null;
-
-
-    /*
-     * 完全一致がなければ部分一致。
-     */
-
-    if (!channelId) {
-
-        const partial =
-            items.find(
-                item =>
-                    (
-                        item.snippet?.channelTitle ||
-                        ""
-                    ).includes(
-                        name
-                    )
-            );
-
-
-        channelId =
-            partial?.id?.channelId ||
-            null;
-
-    }
-
-
-    /*
-     * 見つかったIDを保存。
-     */
-
-    if (channelId) {
-
-        cache[name] =
-            channelId;
-
-
-        saveChannelCache(
-            cache
-        );
-
-    }
-
-
-    return channelId;
-
 }
 
 
@@ -2601,8 +2501,10 @@ async function loadHorrorInmContent() {
         ================================================= */
 
         for (
-            const channelName of KNOWN_CHANNELS
+            const channel of KNOWN_CHANNELS
         ) {
+
+            const channelName = channel.name;
 
             setHorrorStatus(
                 `「${channelName}」を確認中...`
@@ -2610,8 +2512,8 @@ async function loadHorrorInmContent() {
 
 
             const channelId =
-                await resolveChannelIdByName(
-                    channelName
+                await resolveChannelIdByHandle(
+                    channel
                 );
 
 
@@ -2691,10 +2593,19 @@ async function loadHorrorInmContent() {
              * search.listは最大1回。
              */
 
-            const ids =
-                await searchKeywordOnce(
-                    keyword
-                );
+            let ids;
+
+            try {
+                ids = await searchKeywordOnce(keyword);
+            } catch (error) {
+                if (String(error.message).includes("検索クォータ") ||
+                    String(error.message).includes("Quota exceeded")) {
+                    console.warn("[ホラー淫夢] 検索クォータ不足。ここまでの結果だけ表示します。");
+                    setHorrorStatus(`検索クォータ不足。ここまで ${horrorVideos.size}件取得`);
+                    break;
+                }
+                throw error;
+            }
 
 
             setHorrorStatus(
