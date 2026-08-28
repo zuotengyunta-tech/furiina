@@ -478,12 +478,10 @@ const FILTER_KEYWORDS = [
 ];
 
 function matchesKeywords(title, tags) {
+  // 注意: この手のMAD動画コミュニティでは内容に関係なく人気タグを大量に付ける
+  // 「タグスパム」が横行しているため、タグでの判定は行わずタイトルのみで厳密に判定する。
   const t = title || "";
-  if (FILTER_KEYWORDS.some(k => t.includes(k))) return true;
-  if (Array.isArray(tags)) {
-    return tags.some(tag => FILTER_KEYWORDS.some(k => tag.includes(k)));
-  }
-  return false;
+  return FILTER_KEYWORDS.some(k => t.includes(k));
 }
 
 // videos.list はid指定50件まで一括取得可能（part=snippetで1コール1ユニットと安価）
@@ -512,7 +510,8 @@ async function fetchVideoDetailsMap(videoIds) {
 
 /**
  * 複数の検索キーワード×複数の並び順でYouTube検索APIを叩いて候補動画を広く集めたあと、
- * videos.list でタイトル・タグを取得して FILTER_KEYWORDS に実際に一致するものだけを表示する。
+ * videos.list でタイトルを取得して FILTER_KEYWORDS に実際に一致するものだけを表示する。
+ * （タグはこのジャンルでスパム的に付与されることが多く信頼できないため判定に使わない）
  * 注意: search.list は1回あたり100ユニット消費するため、キーワード数・並び順・
  * ページ数が多いと1日のAPIクォータ(デフォルト10,000ユニット)をすぐに消費します。
  * 200件を目標にしますが、条件に合う動画自体が少ない場合はそれ以上増やせません。
@@ -567,7 +566,7 @@ async function loadSearchQueries(queries, elementId) {
 
   if (note) {
     if (count === 0) {
-      note.textContent = 'タイトル・タグに一致する動画が見つかりませんでした';
+      note.textContent = 'タイトルに一致する動画が見つかりませんでした';
     } else if (count < SEARCH_TARGET_MIN) {
       note.textContent = `絞り込み後: ${count}件（目標${SEARCH_TARGET_MIN}件には届きませんでした）`;
     } else {
