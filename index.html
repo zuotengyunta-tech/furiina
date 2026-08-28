@@ -468,25 +468,65 @@ async function loadChannelByHandle(handle, elementId) {
 const SEARCH_TARGET_MIN = 200;
 // 同じキーワードでも並び順を変えて検索すると、取得できる動画の顔ぶれが増えることがあるため併用する
 const SEARCH_ORDERS = ["relevance", "viewCount", "date"];
+// タイトル or タグにこれらの語のいずれかが実際に含まれる動画だけを最終的に採用する（部分一致）
+const FILTER_KEYWORDS = [
+  "禍淫夢",
+  "社会派ホラー淫夢",
+  "ホラー淫夢",
+  "ショートホラー淫夢",
+  "短編ホラーINM"
+];
+
+function matchesKeywords(title, tags) {
+  const t = title || "";
+  if (FILTER_KEYWORDS.some(k => t.includes(k))) return true;
+  if (Array.isArray(tags)) {
+    return tags.some(tag => FILTER_KEYWORDS.some(k => tag.includes(k)));
+  }
+  return false;
+}
+
+// videos.list はid指定50件まで一括取得可能（part=snippetで1コール1ユニットと安価）
+async function fetchVideoDetailsMap(videoIds) {
+  const map = new Map();
+  for (let i = 0; i < videoIds.length; i += 50) {
+    const chunk = videoIds.slice(i, i + 50);
+    try {
+      const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${chunk.join(',')}&key=${API_KEY}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!data.items) continue;
+      data.items.forEach(v => {
+        map.set(v.id, {
+          title: v.snippet.title,
+          tags: v.snippet.tags || [],
+          thumb: (v.snippet.thumbnails && (v.snippet.thumbnails.medium?.url || v.snippet.thumbnails.default?.url)) || ""
+        });
+      });
+    } catch (err) {
+      console.error('動画詳細取得失敗:', err);
+    }
+  }
+  return map;
+}
 
 /**
- * 複数の検索キーワード×複数の並び順でYouTube検索APIを叩き、
- * ヒットした動画をvideoId単位で重複排除しながら1つのリストにまとめて表示する。
+ * 複数の検索キーワード×複数の並び順でYouTube検索APIを叩いて候補動画を広く集めたあと、
+ * videos.list でタイトル・タグを取得して FILTER_KEYWORDS に実際に一致するものだけを表示する。
  * 注意: search.list は1回あたり100ユニット消費するため、キーワード数・並び順・
  * ページ数が多いと1日のAPIクォータ(デフォルト10,000ユニット)をすぐに消費します。
- * 200件を目標にしますが、該当動画自体が少ない場合はそれ以上増やせません。
+ * 200件を目標にしますが、条件に合う動画自体が少ない場合はそれ以上増やせません。
  */
 async function loadSearchQueries(queries, elementId) {
   const container = document.getElementById(elementId);
   const note = document.getElementById(elementId + '-note');
-  const seen = new Set();
-  let count = 0;
+  const candidateIds = new Set();
 
-  const updateNote = () => {
+  const updateNoteCollecting = () => {
     if (!note) return;
-    note.textContent = `読み込み中... ${count}件取得（目標 ${SEARCH_TARGET_MIN}件）`;
+    note.textContent = `候補を収集中... ${candidateIds.size}件（絞り込み前）`;
   };
-  updateNote();
+  updateNoteCollecting();
 
   outer:
   for (const q of queries) {
@@ -500,28 +540,36 @@ async function loadSearchQueries(queries, elementId) {
           if (!data.items) break;
           data.items.forEach(item => {
             const vid = item.id && item.id.videoId;
-            if (vid && !seen.has(vid)) {
-              seen.add(vid);
-              renderSearchItem(item, container);
-              count++;
-            }
+            if (vid) candidateIds.add(vid);
           });
-          updateNote();
+          updateNoteCollecting();
           pageToken = data.nextPageToken || '';
         } while (pageToken);
       } catch (err) {
         console.error(`検索失敗 ("${q}" / order=${order}):`, err);
       }
-      // すでに目標件数に達していれば、これ以上のクォータ消費を避けて打ち切る
-      if (count >= SEARCH_TARGET_MIN) break outer;
+      // 候補数が十分になったら、これ以上のクォータ消費を避けて打ち切る
+      // （フィルタで減る分を見込んで目標の2倍程度を目安に候補を集める）
+      if (candidateIds.size >= SEARCH_TARGET_MIN * 2) break outer;
     }
   }
 
+  if (note) note.textContent = `候補${candidateIds.size}件を絞り込み中...`;
+
+  const detailsMap = await fetchVideoDetailsMap([...candidateIds]);
+  let count = 0;
+  detailsMap.forEach((info, videoId) => {
+    if (matchesKeywords(info.title, info.tags)) {
+      renderVideoData(videoId, info.title, info.thumb, container);
+      count++;
+    }
+  });
+
   if (note) {
     if (count === 0) {
-      note.textContent = '該当する動画が見つかりませんでした';
+      note.textContent = 'タイトル・タグに一致する動画が見つかりませんでした';
     } else if (count < SEARCH_TARGET_MIN) {
-      note.textContent = `目標未達: ${count}件のみ取得できました（該当動画がこれ以上見つかりません）`;
+      note.textContent = `絞り込み後: ${count}件（目標${SEARCH_TARGET_MIN}件には届きませんでした）`;
     } else {
       note.remove();
     }
