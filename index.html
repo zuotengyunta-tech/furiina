@@ -1159,7 +1159,7 @@ const CHANNEL_CACHE_KEY =
 ========================================================= */
 
 const SEARCH_CACHE_KEY =
-    "horror-inm-search-cache-v2";
+    "horror-inm-search-cache-v3";
 
 
 /*
@@ -1677,82 +1677,57 @@ async function fetchVideoDetailsMap(
     const map =
         new Map();
 
-
     for (
         let i = 0;
-
         i < videoIds.length;
-
         i += 50
     ) {
 
         const chunk =
-            videoIds.slice(
-                i,
-                i + 50
-            );
+            videoIds.slice(i, i + 50);
 
-
-        if (
-            chunk.length === 0
-        ) {
-
+        if (chunk.length === 0) {
             continue;
-
         }
 
-
         const url =
-
             "https://www.googleapis.com/youtube/v3/videos" +
-
             "?part=snippet" +
-
             `&id=${chunk.join(",")}` +
-
             `&key=${encodeURIComponent(API_KEY)}`;
-
 
         try {
 
             const data =
-                await fetchJson(
-                    url
-                );
+                await fetchJson(url);
 
+            (data.items || []).forEach(video => {
 
-            (data.items || [])
-                .forEach(
-                    video => {
+                map.set(
+                    video.id,
+                    {
+                        title:
+                            video.snippet?.title ||
+                            "",
 
-                        map.set(
-                            video.id,
-                            {
+                        tags:
+                            Array.isArray(video.snippet?.tags)
+                                ? video.snippet.tags
+                                : [],
 
-                                title:
-                                    video.snippet?.title ||
-                                    "",
+                        thumb:
+                            video.snippet?.thumbnails?.medium?.url ||
+                            video.snippet?.thumbnails?.high?.url ||
+                            video.snippet?.thumbnails?.default?.url ||
+                            "",
 
-                                thumb:
-
-                                    video.snippet?.thumbnails?.medium?.url ||
-
-                                    video.snippet?.thumbnails?.high?.url ||
-
-                                    video.snippet?.thumbnails?.default?.url ||
-
-                                    "",
-
-                                channelTitle:
-                                    video.snippet?.channelTitle ||
-                                    ""
-
-                            }
-                        );
-
+                        channelTitle:
+                            video.snippet?.channelTitle ||
+                            ""
                     }
                 );
 
+            });
 
         } catch (error) {
 
@@ -1765,96 +1740,63 @@ async function fetchVideoDetailsMap(
 
     }
 
-
     return map;
-
 }
 
 
 /* =========================================================
-   ★タイトルからタグ判定
+   ★タイトル・YouTubeタグから分類
 ========================================================= */
 
 function getTitleTag(
-    title
+    title,
+    tags = []
 ) {
 
-    const t =
-        title || "";
+    const titleText =
+        String(title || "");
 
+    const tagText =
+        Array.isArray(tags)
+            ? tags.map(tag => String(tag || ""))
+            : [];
 
     /*
-     * 最優先
+     * タイトルとタグの両方を判定対象にする。
+     *
+     * 優先順位は、包含関係による誤分類を防ぐため
+     * 長い・具体的な表記を先に判定する。
      *
      * 【ホラー淫夢】
-     *
-     * と
-     *
-     * ホラー淫夢
-     *
-     * を絶対に混同しない。
-     */
-
-    if (
-        t.includes(
-            "【ホラー淫夢】"
-        )
-    ) {
-
-        return "【ホラー淫夢】";
-
-    }
-
-
-    /*
+     * ↓
      * ショートホラー淫夢
-     *
-     * 通常のホラー淫夢より先に判定。
-     */
-
-    if (
-        t.includes(
-            "ショートホラー淫夢"
-        )
-    ) {
-
-        return "ショートホラー淫夢";
-
-    }
-
-
-    /*
+     * ↓
      * 短編ホラーINM
+     * ↓
+     * ホラー淫夢
      */
 
-    if (
-        t.includes(
-            "短編ホラーINM"
-        )
-    ) {
+    const has = (keyword) =>
+        titleText.includes(keyword) ||
+        tagText.some(tag => tag.includes(keyword));
 
+    if (has("【ホラー淫夢】")) {
+        return "【ホラー淫夢】";
+    }
+
+    if (has("ショートホラー淫夢")) {
+        return "ショートホラー淫夢";
+    }
+
+    if (has("短編ホラーINM")) {
         return "短編ホラーINM";
-
     }
 
-
-    /*
-     * 最後に通常のホラー淫夢。
-     */
-
-    if (
-        t.includes(
-            "ホラー淫夢"
-        )
-    ) {
-
+    if (has("ホラー淫夢")) {
         return "ホラー淫夢";
-
     }
-
 
     return "";
-
 }
 
 
@@ -2373,12 +2315,13 @@ function addHorrorVideo(
 
 
     /*
-     * ★タグは必ずタイトルから取得。
+     * ★タグはタイトルまたはYouTubeタグから取得。
      */
 
     const tag =
         getTitleTag(
-            title
+            title,
+            info.tags || []
         );
 
 
@@ -2541,34 +2484,46 @@ async function loadHorrorInmContent() {
 
 
             /*
-             * ★チャンネル動画は
-             * タイトル一致で捨てない。
+             * チャンネル動画も、タイトルまたはYouTubeタグで
+             * ホラー淫夢系かどうかを判定する。
+             *
+             * playlistItems.list ではタグが取得できないため、
+             * videos.list で詳細を取得する。
              */
 
-            uploads.forEach(
-                (
-                    info,
-                    videoId
-                ) => {
+            const channelDetails =
+                await fetchVideoDetailsMap(
+                    [...uploads.keys()]
+                );
+
+            let channelMatched = 0;
+
+            channelDetails.forEach(
+                (info, videoId) => {
+
+                    const tag =
+                        getTitleTag(
+                            info.title,
+                            info.tags || []
+                        );
+
+                    if (!tag) {
+                        return;
+                    }
+
+                    channelMatched++;
 
                     addHorrorVideo(
-
                         videoId,
-
                         info,
-
                         channelName,
-
                         "channel"
-
                     );
-
                 }
             );
 
-
             console.log(
-                `[ホラー淫夢] ${channelName}: ${uploads.size}件`
+                `[ホラー淫夢] ${channelName}: ${uploads.size}件中 ${channelMatched}件がタイトル/タグ一致`
             );
 
         }
@@ -2634,12 +2589,13 @@ async function loadHorrorInmContent() {
                 ) => {
 
                     /*
-                     * ★実際のタイトルから判定。
+                     * ★実際のタイトルまたはYouTubeタグから判定。
                      */
 
                     const tag =
                         getTitleTag(
-                            info.title
+                            info.title,
+                            info.tags || []
                         );
 
 
